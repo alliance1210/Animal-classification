@@ -1,14 +1,25 @@
 from keras.models import load_model
 from PIL import Image, ImageOps
 import numpy as np
-import urllib.request
 from PIL import Image
-  
-# urllib.request.urlretrieve(
-#   'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSOIcIuJO11xsOXcTqbcdxTHlYvH0IjugwhwhdU5qL41W5QkcChJcK8ZnerzeJnnqlXwo4&usqp=CAU',
-#    "gfg.png")
-  
-# img = Image.open("gfg.png")
+from sklearn.utils import shuffle
+from sklearn.metrics import confusion_matrix,classification_report
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+import seaborn as sns
+from tqdm import tqdm
+import os
+import gc
+import cv2
+import matplotlib.pyplot as plt
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+import warnings
+warnings.filterwarnings("ignore")
+
+
+
+
 
 # Load the model
 model = load_model('keras_model.h5')
@@ -24,8 +35,6 @@ data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
 # image.show()
 
 
-
-# print(model.predict(data))
 # x=prediction.index(max(prediction))
 ans=["Cat","Dog","Whale","Human","Bear","Chicken","Cow","Crocodile","Elephant","Goose","Hippopotamas","Horse",
 "Lion","Lioness","Pig","Rhino","Sheep","Tiger","Rabbit"]
@@ -64,10 +73,32 @@ details.append({"Height":"1ft","Weight":"1kg"})
 details.append({"Height":"1ft","Weight":"1kg"})
 
 
-# print(ans[x],":",round(prediction[x],2)*100,"%")
-# print("Avg Height:",details[x]['Height'],", Avg Weight:",details[x]['Weight'])
-# print("Habitat:",details[x]['Habitat'])
-# print("Common health issues:",details[x]['Disease'])
+
+images = []
+labels = []
+
+main_directory = 'test'
+
+for animal in tqdm(os.listdir(main_directory)):
+    for i in range(len(os.listdir(main_directory + '/' + animal))):
+        if i < 300:
+            img = cv2.imread(main_directory + '/' + animal + '/' + os.listdir(main_directory + '/' + animal)[i])
+            resized_img = cv2.resize(img,(224,224))
+            resized_img = resized_img / 255.0
+            images.append(resized_img)
+            labels.append(animal)
+
+images = np.array(images,dtype = 'float32')
+le = preprocessing.LabelEncoder()
+le.fit(labels)
+class_names = le.classes_
+labels = le.transform(labels)
+
+labels = np.array(labels, dtype = 'uint8')
+labels = np.resize(labels, (len(labels),1))
+
+test_images= images
+
 
 
 
@@ -75,8 +106,8 @@ details.append({"Height":"1ft","Weight":"1kg"})
 import tkinter as tk
 from tkinter import filedialog
 from tkinter.filedialog import askopenfile
-from PIL import Image, ImageTk
 from tkinter import *
+from PIL import ImageTk, Image
 
 win = tk.Tk()
 win.geometry("1920x1080")
@@ -131,7 +162,7 @@ frame = Frame(win, width=500, height=385, bg="grey", colormap="new") #image box
 frame.pack()
 frame.place(x=650, y=120)
 
-from PIL import Image
+
 import matplotlib.image as mpimg
 
 
@@ -151,6 +182,7 @@ def upload_file():
     img=ImageTk.PhotoImage(img_resized)
     label = Label(frame, image = img)
     label.pack()
+    
 
 def predict_output():
   for widget in frame1.winfo_children():
@@ -177,9 +209,52 @@ def predict_output():
   frame1.itemconfig(mytext2,text=comon)
   frame1.itemconfig(mytext3,text=habitat)
   frame1.itemconfig(mytext4,text=issues)
-  
 
+import pandas as pd
+def scores(cm):
+    p = {}
+    r = {}
+    f1 = {}
+    
+    for i in range(len(cm)):
+        p[i] = cm[i,i] / sum(cm[:,i])
+        r[i] = cm[i,i] / sum(cm[i,:])
+        f1[i] = 2 * (cm[i,i] / sum(cm[:,i])) * (cm[i,i]/sum(cm[i,:])) / ((cm[i,i] / sum(cm[:,i])) + (cm[i,i]/sum(cm[i,:])))
+    
+    return p,r,f1 
+def get_accuracy():
+  vgg_predictions = model.predict(test_images)
+  vgg_predictions = np.argmax(vgg_predictions,axis = 1)
+  vgg_cm = confusion_matrix(labels, vgg_predictions)
+  plt.figure(figsize = (5,5))
+  # plt.subplot(1,1,1)
+  sns.heatmap(vgg_cm,cmap = 'Blues',annot = True, xticklabels = class_names, yticklabels = class_names)
+  plt.show()
+  v_p,v_r,v_f1 = scores(vgg_cm)
 
+  Precision = {
+      'VGG16 Precision' : v_p,
+  }
+
+  Precision = pd.DataFrame(Precision)
+  print(Precision)
+
+  Recall = {
+      
+      'VGG16 Recall' : v_r,
+  }
+
+  Recall = pd.DataFrame(Recall)
+
+  print(Recall)
+
+  F1_score = {
+    
+      'VGG16 F1_score' : v_f1
+  }
+
+  F1_score = pd.DataFrame(F1_score)
+  print(F1_score)
 
 def close():
    win.destroy()
@@ -192,15 +267,15 @@ predict = tk.Button(win,text='Predict', width=20,command = lambda:predict_output
 predict.config(font=('times', 12, 'bold'))
 predict.place(x=1230, y=200)
 
-font = ('black', 10, 'bold')
-probabilities = Label(win, text='PROBABILITIES OF EACH CLASS') #probability tag
-probabilities.config(bg='white', fg='dark goldenrod')
-probabilities.config(font=('times', 12, 'bold'))
-probabilities.config(height=3, width=30)
-probabilities.place(x=200, y=580)
+b3 = tk.Button(win,text='Get \n Accuracy', width=20,command = lambda:get_accuracy())
+b3.config(font=('times', 12, 'bold'))
+b3.place(x=200, y=580)
 
 exitButton = Button(win, text="Exit", command=close)
 exitButton.place(x=1230, y=550)
 exitButton.config(font=('times', 12, 'bold'), height=2,width=20)
 
 win.mainloop()  # Keep the window open
+
+
+
